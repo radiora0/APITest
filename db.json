@@ -1,5 +1,3 @@
-</> JSON
-
 {
 	"todos":[
 		{"id":1, "title": "learn REST", "done":fasle}
