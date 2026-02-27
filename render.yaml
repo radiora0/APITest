@@ -1,0 +1,9 @@
+</> YAML
+
+services:
+	- type: web
+	  name: mock-api
+	  env: node
+	  plan: free
+	  bulidCommand: npm install
+	  startCommand: npm start
