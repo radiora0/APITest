@@ -35,7 +35,7 @@ class TireProductionOut(TireProductionIn):
 
 
 class TireProduction(Base):
-    __tablename__ = "tire_production"
+    __tablename__ = "production"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     produced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
