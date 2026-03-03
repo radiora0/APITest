@@ -1,6 +1,6 @@
 import requests
 
-BASE_URL = "https://apptest-96et.onrender.com"  # 배포 후 바꾸기
+BASE_URL = "https://render-json-example.onrender.com"  # 배포 후 바꾸기
 
 def main():
     # 1) JSON POST로 "택배 접수" (서버에 데이터 보내기)
