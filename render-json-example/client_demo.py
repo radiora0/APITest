@@ -1,6 +1,6 @@
 import requests
 
-BASE_URL = "https://YOUR-RENDER-APP.onrender.com"
+BASE_URL = "https://render-json-example.onrender.com"
 
 def main():
     payload = {
