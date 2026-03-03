@@ -1,30 +1,30 @@
 import requests
 
-BASE_URL = "https://render-json-example.onrender.com"  # 배포 후 바꾸기
+BASE_URL = "https://YOUR-RENDER-APP.onrender.com"
 
 def main():
-    # 1) JSON POST로 "택배 접수" (서버에 데이터 보내기)
     payload = {
-        "sender": "홍길동",
-        "receiver": "김철수",
-        "address": "서울특별시 강남구 어딘가 123",
-        "item": "노트북",
-        "note": "문 앞에 두세요",
+        "lot_no": "LOT-20260303-001",
+        "line": "L1",
+        "tire_model": "205/55R16",
+        "quantity": 120,
+        "qc_result": "PASS",
+        "note": "Shift A",
     }
 
-    r = requests.post(f"{BASE_URL}/shipments", json=payload, timeout=15)
+    # 보내기(POST)
+    r = requests.post(f"{BASE_URL}/tire-productions", json=payload, timeout=20)
     r.raise_for_status()
     created = r.json()
-    print("✅ Created shipment:")
+    print("✅ SENT(JSON) -> saved in Postgres:")
     print(created)
 
-    shipment_id = created["id"]
-
-    # 2) JSON GET으로 조회 (서버에서 데이터 받기)
-    r = requests.get(f"{BASE_URL}/shipments/{shipment_id}", timeout=15)
+    # 받기(GET)
+    record_id = created["id"]
+    r = requests.get(f"{BASE_URL}/tire-productions/{record_id}", timeout=20)
     r.raise_for_status()
     fetched = r.json()
-    print("\n📦 Fetched shipment:")
+    print("\n📥 RECEIVED(JSON) <- fetched from Postgres:")
     print(fetched)
 
 if __name__ == "__main__":
