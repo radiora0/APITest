@@ -7,7 +7,44 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, String, Integer, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker, Mapped, mapped_column
+from fastapi import Body
 
+SOAP_REQUEST_EXAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:t="http://example.com/tire">
+  <soap:Body>
+    <t:SendProductionRequest>
+      <lot_no>LOT-20260303-001</lot_no>
+      <line>L1</line>
+      <tire_model>205/55R16</tire_model>
+      <quantity>120</quantity>
+      <note>Shift A</note>
+    </t:SendProductionRequest>
+  </soap:Body>
+</soap:Envelope>
+"""
+
+@app.post(
+    "/soap/productions",
+    summary="SOAP(XML)로 생산정보 수신",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "text/xml": {
+                    "schema": {"type": "string"},
+                    "example": SOAP_REQUEST_EXAMPLE,
+                },
+                "application/xml": {
+                    "schema": {"type": "string"},
+                    "example": SOAP_REQUEST_EXAMPLE,
+                },
+            },
+        }
+    },
+)
+async def soap_send_production(xml_body: str = Body(..., media_type="text/xml")):
+    raw = xml_body.encode("utf-8")
 
 # -----------------------------
 # DB 연결 (Render DATABASE_URL + pg8000)
