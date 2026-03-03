@@ -1,61 +1,32 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-from typing import Dict
-import uuid
-import time
+import os
+from fastapi import FastAPI
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-app = FastAPI(title="Render JSON Example", version="1.0.0")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# 데모용 "메모리 DB" (배포 후 재시작되면 데이터 날아감)
-DB: Dict[str, dict] = {}
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(bind=engine)
 
+Base = declarative_base()
 
-class ShipmentCreate(BaseModel):
-    sender: str = Field(..., examples=["홍길동"])
-    receiver: str = Field(..., examples=["김철수"])
-    address: str = Field(..., examples=["서울특별시 ..."])
-    item: str = Field(..., examples=["노트북"])
-    note: str | None = Field(None, examples=["문 앞에 두세요"])
+app = FastAPI()
 
 
-class Shipment(BaseModel):
-    id: str
-    created_at: int
-    sender: str
-    receiver: str
-    address: str
-    item: str
-    note: str | None
+class Shipment(Base):
+    __tablename__ = "shipments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sender = Column(String)
+    receiver = Column(String)
+    item = Column(String)
 
 
-@app.get("/health")
-def health():
-    return {"ok": True}
+@app.on_event("startup")
+def on_startup():
+    Base.metadata.create_all(bind=engine)
 
 
-@app.post("/shipments", response_model=Shipment)
-def create_shipment(payload: ShipmentCreate):
-    shipment_id = str(uuid.uuid4())
-    created_at = int(time.time())
-
-    shipment = {
-        "id": shipment_id,
-        "created_at": created_at,
-        **payload.model_dump(),
-    }
-    DB[shipment_id] = shipment
-    return shipment
-
-
-@app.get("/shipments/{shipment_id}", response_model=Shipment)
-def get_shipment(shipment_id: str):
-    shipment = DB.get(shipment_id)
-    if not shipment:
-        raise HTTPException(status_code=404, detail="Shipment not found")
-    return shipment
-
-
-@app.get("/shipments")
-def list_shipments():
-    # 단순 리스트
-    return {"count": len(DB), "items": list(DB.values())}
+@app.get("/test-db")
+def test_db():
+    return {"message": "DB connected successfully"}
