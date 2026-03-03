@@ -14,7 +14,7 @@ app = FastAPI()
 
 
 class Shipment(Base):
-    __tablename__ = "shipments"
+    __tablename__ = "production"
 
     id = Column(Integer, primary_key=True, index=True)
     sender = Column(String)
