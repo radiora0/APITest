@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional, List
 from xml.etree import ElementTree as ET
 
-from fastapi import FastAPI, HTTPException, Request, Response, Body
+from fastapi import FastAPI, HTTPException, Response, Body
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, String, Integer, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker, Mapped, mapped_column
@@ -28,12 +28,12 @@ Base = declarative_base()
 
 app = FastAPI(
     title="Tire Data Exchange Demo (REST+JSON + SOAP/XML)",
-    version="1.1.0",
+    version="1.2.0",
 )
 
 
 # =========================================================
-# DB 모델
+# Production (DB Model)
 # =========================================================
 class Production(Base):
     __tablename__ = "production"
@@ -49,7 +49,7 @@ class Production(Base):
 
 
 # =========================================================
-# REST(JSON) Schema
+# REST(JSON) Schemas
 # =========================================================
 class ProductionIn(BaseModel):
     lot_no: str = Field(..., examples=["LOT-20260303-001"])
@@ -65,7 +65,7 @@ class ProductionOut(ProductionIn):
 
 
 # =========================================================
-# Startup
+# Startup: 테이블 생성
 # =========================================================
 @app.on_event("startup")
 def on_startup():
@@ -78,7 +78,7 @@ def health():
 
 
 # =========================================================
-# 1️⃣ REST + JSON
+# 1) REST + JSON: 생성/조회
 # =========================================================
 @app.post("/productions", response_model=ProductionOut)
 def create_production(payload: ProductionIn):
@@ -97,20 +97,72 @@ def create_production(payload: ProductionIn):
         db.close()
 
 
+@app.get("/productions/{record_id}", response_model=ProductionOut)
+def get_production(record_id: int):
+    db = SessionLocal()
+    try:
+        row = db.get(Production, record_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+
+        return ProductionOut(
+            id=row.id,
+            produced_at=row.produced_at,
+            lot_no=row.lot_no,
+            line=row.line,
+            tire_model=row.tire_model,
+            quantity=row.quantity,
+            note=row.note,
+        )
+    finally:
+        db.close()
+
+
+@app.get("/productions")
+def list_productions(limit: int = 50):
+    db = SessionLocal()
+    try:
+        rows: List[Production] = (
+            db.query(Production)
+            .order_by(Production.id.desc())
+            .limit(min(limit, 200))
+            .all()
+        )
+        return {
+            "count": len(rows),
+            "items": [
+                {
+                    "id": r.id,
+                    "produced_at": r.produced_at,
+                    "lot_no": r.lot_no,
+                    "line": r.line,
+                    "tire_model": r.tire_model,
+                    "quantity": r.quantity,
+                    "note": r.note,
+                }
+                for r in rows
+            ],
+        }
+    finally:
+        db.close()
+
+
 # =========================================================
-# 2️⃣ SOAP/XML
+# 2) SOAP/XML 엔드포인트
+#    - Swagger(/docs)에 XML 입력창 나오게 openapi_extra + Body 사용
 # =========================================================
 SOAP_NS = "http://schemas.xmlsoap.org/soap/envelope/"
-TIRE_NS = "http://example.com/tire"
+TIRE_NS = "http://example.com/tire"  # 데모용 네임스페이스
 
 ET.register_namespace("soap", SOAP_NS)
 ET.register_namespace("t", TIRE_NS)
 
 
 def _find_text_anywhere(root: ET.Element, tag_local_name: str) -> Optional[str]:
+    """네임스페이스가 붙든 말든 <lot_no> 같은 로컬 태그명으로 값을 찾아줌"""
     for elem in root.iter():
         if elem.tag.split("}")[-1] == tag_local_name:
-            if elem.text:
+            if elem.text is not None:
                 return elem.text.strip()
             return ""
     return None
@@ -122,10 +174,10 @@ def _soap_fault(code: str, message: str) -> str:
     fault = ET.SubElement(body, "Fault")
     ET.SubElement(fault, "faultcode").text = code
     ET.SubElement(fault, "faultstring").text = message
-    return ET.tostring(envelope, encoding="utf-8", xml_declaration=True).decode()
+    return ET.tostring(envelope, encoding="utf-8", xml_declaration=True).decode("utf-8")
 
 
-def _soap_success(record_id: int, produced_at: datetime) -> str:
+def _soap_success_response(record_id: int, produced_at: datetime) -> str:
     envelope = ET.Element(ET.QName(SOAP_NS, "Envelope"))
     body = ET.SubElement(envelope, ET.QName(SOAP_NS, "Body"))
 
@@ -134,7 +186,7 @@ def _soap_success(record_id: int, produced_at: datetime) -> str:
     ET.SubElement(resp, "id").text = str(record_id)
     ET.SubElement(resp, "produced_at").text = produced_at.isoformat()
 
-    return ET.tostring(envelope, encoding="utf-8", xml_declaration=True).decode()
+    return ET.tostring(envelope, encoding="utf-8", xml_declaration=True).decode("utf-8")
 
 
 SOAP_REQUEST_EXAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -173,6 +225,9 @@ SOAP_REQUEST_EXAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
     },
 )
 async def soap_send_production(xml_body: str = Body(..., media_type="text/xml")):
+    if not xml_body:
+        xml = _soap_fault("Client", "Empty body")
+        return Response(content=xml, media_type="text/xml", status_code=400)
 
     try:
         root = ET.fromstring(xml_body)
@@ -180,6 +235,7 @@ async def soap_send_production(xml_body: str = Body(..., media_type="text/xml"))
         xml = _soap_fault("Client", "Invalid XML")
         return Response(content=xml, media_type="text/xml", status_code=400)
 
+    # 필수 필드 추출
     lot_no = _find_text_anywhere(root, "lot_no")
     line = _find_text_anywhere(root, "line")
     tire_model = _find_text_anywhere(root, "tire_model")
@@ -203,6 +259,7 @@ async def soap_send_production(xml_body: str = Body(..., media_type="text/xml"))
         xml = _soap_fault("Client", "quantity must be integer")
         return Response(content=xml, media_type="text/xml", status_code=400)
 
+    # DB 저장
     db = SessionLocal()
     try:
         row = Production(
@@ -216,7 +273,7 @@ async def soap_send_production(xml_body: str = Body(..., media_type="text/xml"))
         db.commit()
         db.refresh(row)
 
-        xml = _soap_success(row.id, row.produced_at)
+        xml = _soap_success_response(row.id, row.produced_at)
         return Response(content=xml, media_type="text/xml", status_code=200)
     finally:
         db.close()
